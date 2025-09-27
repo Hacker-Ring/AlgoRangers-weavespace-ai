@@ -40,17 +40,35 @@ let whiteboardState = {
 const connectedUsers = new Map();
 const voiceRooms = new Map();
 
+// Utility function to generate random colors for users
+function getRandomColor() {
+  const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#FF9FF3', '#54A0FF', '#5F27CD'];
+  return colors[Math.floor(Math.random() * colors.length)];
+}
+
+// Helper function to get/set user info
+function getUserInfo(socket) {
+  return {
+    id: socket.id,
+    username: socket.handshake.auth.username || 'Anonymous',
+    cursor: { x: 0, y: 0 },
+    color: getRandomColor(),
+    isDrawing: false
+  };
+}
+
 // Socket.io connection handling
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
 
-  // Add user to connected users
-  connectedUsers.set(socket.id, {
-    id: socket.id,
-    cursor: { x: 0, y: 0 },
-    color: getRandomColor(),
-    isDrawing: false
-  });
+  // Store user info with username
+  connectedUsers.set(socket.id, getUserInfo(socket));
+
+  // Also store username on socket for chat
+  socket.user = {
+    username: socket.handshake.auth.username || 'Anonymous',
+    id: socket.id
+  };
 
   // Send current whiteboard state to newly connected user
   socket.emit('whiteboard-state', whiteboardState);
@@ -181,6 +199,54 @@ io.on('connection', (socket) => {
   });
   // ---- END: Voice Chat Events ----
 
+  // ---- START: Chat Events ----
+  socket.on('joinChat', (data) => {
+    console.log(`User ${socket.id} joining chat room: ${data.roomId}`);
+    socket.join(data.roomId);
+    socket.to(data.roomId).emit('userJoined', {
+      username: socket.user?.username || 'Anonymous',
+      userId: socket.id
+    });
+  });
+
+  socket.on('leaveChat', (data) => {
+    console.log(`User ${socket.id} leaving chat room: ${data.roomId}`);
+    socket.leave(data.roomId);
+    socket.to(data.roomId).emit('userLeft', {
+      username: socket.user?.username || 'Anonymous',
+      userId: socket.id
+    });
+  });
+
+  socket.on('chatMessage', (data) => {
+    console.log(`Chat message from ${socket.id} in room ${data.roomId}: ${data.message.substring(0, 50)}...`);
+
+    // Broadcast to all users in the room (including sender for consistency)
+    io.to(data.roomId).emit('chatMessage', {
+      user: socket.user?.username || 'Anonymous',
+      message: data.message,
+      timestamp: data.timestamp,
+      userId: socket.id
+    });
+  });
+
+  socket.on('typingStart', (data) => {
+    socket.to(data.roomId).emit('userTyping', {
+      userId: socket.id,
+      username: socket.user?.username || 'Anonymous',
+      isTyping: true
+    });
+  });
+
+  socket.on('typingStop', (data) => {
+    socket.to(data.roomId).emit('userTyping', {
+      userId: socket.id,
+      username: socket.user?.username || 'Anonymous',
+      isTyping: false
+    });
+  });
+  // ---- END: Chat Events ----
+
   // Handle disconnection
   socket.on('disconnect', () => {
     console.log(`User disconnected: ${socket.id}`);
@@ -198,17 +264,17 @@ io.on('connection', (socket) => {
       }
     });
 
+    // Broadcast user left for chat rooms
+    socket.broadcast.emit('userLeft', {
+      username: socket.user?.username || 'Anonymous',
+      userId: socket.id
+    });
+
     connectedUsers.delete(socket.id);
     socket.broadcast.emit('user-left', socket.id);
     socket.broadcast.emit('users-update', Array.from(connectedUsers.values()));
   });
 });
-
-// Utility function to generate random colors for users
-function getRandomColor() {
-  const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#FF9FF3', '#54A0FF', '#5F27CD'];
-  return colors[Math.floor(Math.random() * colors.length)];
-}
 
 // Basic health check
 app.get('/health', (req, res) => {
@@ -223,16 +289,49 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Root endpoint
-app.get('/', (req, res) => {
+// Chat rooms status endpoint
+app.get('/api/chat/rooms', (req, res) => {
+  const chatRooms = {};
+
+  // Get all rooms and their users
+  io.sockets.adapter.rooms.forEach((sockets, roomId) => {
+    if (roomId.startsWith('chat-') || roomId === 'main-workspace') {
+      const users = Array.from(sockets).map(socketId => {
+        const socket = io.sockets.sockets.get(socketId);
+        return {
+          id: socketId,
+          username: socket?.user?.username || 'Anonymous'
+        };
+      });
+      chatRooms[roomId] = users;
+    }
+  });
+
   res.json({
-    message: 'Whiteboard API Server is running.'
+    chatRooms,
+    totalConnectedUsers: connectedUsers.size
   });
 });
 
-const PORT = process.env.PORT || 3001;
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Whiteboard API Server is running.',
+    features: ['Whiteboard', 'Voice Chat', 'Text Chat', 'Real-time Collaboration'],
+    endpoints: {
+      health: '/health',
+      chatRooms: '/api/chat/rooms',
+      auth: '/api/auth',
+      workspaces: '/api/workspaces'
+    }
+  });
+});
+
+const PORT = process.env.PORT || 3010;
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📋 Features: Whiteboard, Voice Chat, Text Chat`);
+  console.log(`🌐 CORS enabled for all origins`);
 });
 
 module.exports = { app, server, io };

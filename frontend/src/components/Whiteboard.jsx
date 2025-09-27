@@ -5,6 +5,7 @@ import Canvas from './Canvas';
 import StatusBar from './StatusBar';
 import TextInput from './TextInput';
 import VoiceChat from './VoiceChat';
+import ChatPage from './ChatPage';
 import { useWhiteboardState } from '../hooks/useWhiteboardState';
 import { useSocket } from '../hooks/useSocket';
 import { useCanvasSize } from '../hooks/useCanvasSize';
@@ -31,6 +32,8 @@ const Whiteboard = () => {
 
   // State to control the visibility of the voice chat panel
   const [isVoiceChatVisible, setIsVoiceChatVisible] = useState(false);
+  // State to control the visibility of the chat page
+  const [isChatVisible, setIsChatVisible] = useState(false);
   const roomId = 'main-workspace'; // Use actual workspace ID from your app's state or URL
 
   useKeyboardShortcuts({
@@ -60,6 +63,19 @@ const Whiteboard = () => {
     // Your existing suggestion logic...
     console.log('Suggestion action:', action);
   };
+
+  // If chat is visible, render the ChatPage component
+  if (isChatVisible) {
+    return (
+      // In Whiteboard.jsx, update the ChatPage component usage:
+<ChatPage
+  socket={socket}
+  roomId={roomId}
+  connectedUsers={connectedUsers}
+  onBack={() => setIsChatVisible(false)}
+/>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen bg-gray-100" ref={containerRef}>
@@ -94,6 +110,17 @@ const Whiteboard = () => {
       >
         <span className="text-lg" role="img" aria-label="voice chat icon">
           {isVoiceChatVisible ? '🔊' : '🎤'}
+        </span>
+      </button>
+
+      {/* Chat Toggle Button */}
+      <button
+        onClick={() => setIsChatVisible(true)}
+        className="absolute top-40 left-5 z-40 p-3 rounded-full shadow-md bg-white text-gray-700 hover:bg-gray-200 transition-all"
+        title="Open Chat"
+      >
+        <span className="text-lg" role="img" aria-label="chat icon">
+          💬
         </span>
       </button>
 
