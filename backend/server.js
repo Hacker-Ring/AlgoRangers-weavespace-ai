@@ -12,7 +12,7 @@ const server = http.createServer(app);
 // Configure CORS for both Express and Socket.io
 const io = socketIo(server, {
   cors: {
-    origin: ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173"],
+    origin: "*", // Allow all origins
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -20,7 +20,7 @@ const io = socketIo(server, {
 
 // Middleware
 app.use(cors({
-  origin: ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173"],
+  origin: "*", // Allow all origins
   credentials: true
 }));
 app.use(express.json());
