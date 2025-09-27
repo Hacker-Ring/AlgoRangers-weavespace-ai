@@ -19,7 +19,7 @@ const Dashboard = () => {
   const fetchWorkspaces = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:3001/api/workspaces/my-workspaces', {
+      const response = await fetch('https://algorangers-weavespace-ai.onrender.com/api/workspaces/my-workspaces', {
         headers: {
           'Authorization': `Bearer ${token}`,
         }
@@ -43,7 +43,7 @@ const Dashboard = () => {
   const handleCreateWorkspace = async (workspaceData) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:3001/api/workspaces', {
+      const response = await fetch('https://algorangers-weavespace-ai.onrender.com/api/workspaces', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -71,7 +71,7 @@ const Dashboard = () => {
   const handleJoinWorkspace = async (code) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:3001/api/workspaces/join', {
+      const response = await fetch('https://algorangers-weavespace-ai.onrender.com/api/workspaces/join', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
