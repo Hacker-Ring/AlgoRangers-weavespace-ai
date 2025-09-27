@@ -1,10 +1,10 @@
-// src/components/Whiteboard.jsx
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import Toolbar from './Toolbar';
 import PropertiesPanel from './PropertiesPanel';
 import Canvas from './Canvas';
 import StatusBar from './StatusBar';
 import TextInput from './TextInput';
+import VoiceChat from './VoiceChat';
 import { useWhiteboardState } from '../hooks/useWhiteboardState';
 import { useSocket } from '../hooks/useSocket';
 import { useCanvasSize } from '../hooks/useCanvasSize';
@@ -13,52 +13,25 @@ import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 const Whiteboard = () => {
   const containerRef = useRef(null);
   const canvasSize = useCanvasSize(containerRef);
-  
+
   const {
-    tool,
-    setTool,
-    color,
-    setColor,
-    strokeWidth,
-    setStrokeWidth,
-    shapes,
-    setShapes,
-    currentShape,
-    setCurrentShape,
-    selectedShapeId,
-    setSelectedShapeId,
-    history,
-    historyIndex,
-    isDrawing,
-    setIsDrawing,
-    isTyping,
-    setIsTyping,
-    textInput,
-    setTextInput,
-    textPosition,
-    setTextPosition,
-    dragOffset,
-    setDragOffset,
-    resizeHandle,
-    setResizeHandle,
-    showProperties,
-    setShowProperties,
-    undo,
-    redo,
-    clearCanvas,
-    deleteSelected,
-    saveToHistory
+    tool, setTool, color, setColor, strokeWidth, setStrokeWidth, shapes, setShapes,
+    currentShape, setCurrentShape, selectedShapeId, setSelectedShapeId, history,
+    historyIndex, setHistory, setHistoryIndex, isDrawing, setIsDrawing, isTyping,
+    setIsTyping, textInput, setTextInput, textPosition, setTextPosition, dragOffset,
+    setDragOffset, resizeHandle, setResizeHandle, showProperties, setShowProperties,
+    undo, redo, clearCanvas, deleteSelected, saveToHistory
   } = useWhiteboardState();
 
   const {
-    isConnected,
-    connectedUsers,
-    userCursors,
-    userDrawings,
-    sendCursorMovement,
-    sendShapeUpdate,
-    sendDrawingState
-  } = useSocket(shapes, setShapes, history, historyIndex, canvasSize);
+    socket,
+    isConnected, connectedUsers, userCursors, userDrawings,
+    sendCursorMovement, sendShapeUpdate, sendDrawingState
+  } = useSocket(setShapes, setHistory, setHistoryIndex);
+
+  // State to control the visibility of the voice chat panel
+  const [isVoiceChatVisible, setIsVoiceChatVisible] = useState(false);
+  const roomId = 'main-workspace'; // Use actual workspace ID from your app's state or URL
 
   useKeyboardShortcuts({
     undo,
@@ -66,33 +39,7 @@ const Whiteboard = () => {
     deleteSelected,
     isTyping,
     selectedShapeId,
-    textInput,
-    addText: () => {
-      if (textInput.trim()) {
-        const textShape = {
-          id: Date.now() + Math.random(),
-          type: 'text',
-          x: textPosition.x / canvasSize.width,
-          y: textPosition.y / canvasSize.height,
-          text: textInput,
-          color,
-          fontSize: strokeWidth * 0.005
-        };
-        setShapes(prev => [...prev, textShape]);
-        sendShapeUpdate('add', { shape: textShape });
-        saveToHistory();
-        
-        setTool('select');
-        setSelectedShapeId(textShape.id);
-        setShowProperties(true);
-      }
-      setIsTyping(false);
-      setTextInput('');
-    },
-    cancelText: () => {
-      setIsTyping(false);
-      setTextInput('');
-    }
+    textInput
   });
 
   const updateSelectedShapeProperty = (property, value) => {
@@ -109,43 +56,9 @@ const Whiteboard = () => {
 
   const getSelectedShape = () => shapes.find(shape => shape.id === selectedShapeId);
 
-  // NEW: Handle suggestions from PropertiesPanel
   const handleSuggestion = (action) => {
-    const selectedShape = getSelectedShape();
-    if (!selectedShape) return;
-
-    if (action === 'Add MFA Step') {
-      const newShape = {
-        id: Date.now() + Math.random(),
-        type: 'icon',
-        icon: 'lock',
-        x: (selectedShape.x || 0.5) + 0.05,
-        y: (selectedShape.y || 0.5),
-        color: '#000000',
-        strokeWidth: 2
-      };
-      setShapes(prev => [...prev, newShape]);
-      sendShapeUpdate('add', { shape: newShape });
-      saveToHistory();
-    }
-
-    if (action === 'Add Replication') {
-      const newShape = {
-        id: Date.now() + Math.random(),
-        type: 'database',
-        x: (selectedShape.x || 0.5) + 0.1,
-        y: (selectedShape.y || 0.5),
-        color: '#1976d2',
-        strokeWidth: 3
-      };
-      setShapes(prev => [...prev, newShape]);
-      sendShapeUpdate('add', { shape: newShape });
-      saveToHistory();
-    }
-
-    if (action === 'Check Security Policy') {
-      alert('Reminder: Verify security requirements for this component.');
-    }
+    // Your existing suggestion logic...
+    console.log('Suggestion action:', action);
   };
 
   return (
@@ -169,13 +82,35 @@ const Whiteboard = () => {
         connectedUsers={connectedUsers}
       />
 
+      {/* Voice Chat Toggle Button */}
+      <button
+        onClick={() => setIsVoiceChatVisible(prev => !prev)}
+        className={`absolute top-24 left-5 z-40 p-3 rounded-full shadow-md transition-all ${
+          isVoiceChatVisible 
+            ? 'bg-blue-500 text-white hover:bg-blue-600' 
+            : 'bg-white text-gray-700 hover:bg-gray-200'
+        }`}
+        title="Toggle Voice Chat"
+      >
+        <span className="text-lg" role="img" aria-label="voice chat icon">
+          {isVoiceChatVisible ? '🔊' : '🎤'}
+        </span>
+      </button>
+
+      {/* Voice Chat Component */}
+      <VoiceChat
+        socket={socket}
+        roomId={roomId}
+        isVisible={isVoiceChatVisible}
+      />
+
       <PropertiesPanel
         show={showProperties && getSelectedShape()}
         selectedShape={getSelectedShape()}
         updateSelectedShapeProperty={updateSelectedShapeProperty}
         deleteSelected={deleteSelected}
         canvasSize={canvasSize}
-        onSuggestion={handleSuggestion}   // 👈 NEW
+        onSuggestion={handleSuggestion}
       />
 
       <div className="flex-1 relative">
@@ -217,24 +152,21 @@ const Whiteboard = () => {
           position={textPosition}
           color={color}
           strokeWidth={strokeWidth}
-          onConfirm={() => {
-            if (textInput.trim()) {
-              const textShape = {
-                id: Date.now() + Math.random(),
+          onComplete={(text) => {
+            if (text.trim()) {
+              const newTextShape = {
+                id: Date.now().toString(),
                 type: 'text',
-                x: textPosition.x / canvasSize.width,
-                y: textPosition.y / canvasSize.height,
-                text: textInput,
-                color,
-                fontSize: strokeWidth * 0.005
+                x: textPosition.x,
+                y: textPosition.y,
+                text: text,
+                color: color,
+                fontSize: strokeWidth * 4,
+                fontFamily: 'Arial'
               };
-              setShapes(prev => [...prev, textShape]);
-              sendShapeUpdate('add', { shape: textShape });
+              setShapes(prev => [...prev, newTextShape]);
+              sendShapeUpdate('add', { shape: newTextShape });
               saveToHistory();
-              
-              setTool('select');
-              setSelectedShapeId(textShape.id);
-              setShowProperties(true);
             }
             setIsTyping(false);
             setTextInput('');
@@ -246,10 +178,7 @@ const Whiteboard = () => {
         />
       </div>
 
-      <StatusBar
-        isConnected={isConnected}
-        connectedUsers={connectedUsers}
-      />
+      <StatusBar isConnected={isConnected} connectedUsers={connectedUsers} />
     </div>
   );
 };

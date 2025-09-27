@@ -1,8 +1,9 @@
-// src/hooks/useSocket.js
-import { useEffect, useRef, useState, useCallback } from 'react';
-import io from 'socket.io-client';
+import { useEffect, useState, useRef } from 'react';
+import { io } from 'socket.io-client';
 
-export const useSocket = (shapes, setShapes, history, historyIndex, canvasSize) => {
+const SOCKET_SERVER_URL = "http://localhost:3001";
+
+export const useSocket = (setShapes, setHistory, setHistoryIndex) => {
   const socketRef = useRef(null);
   const [isConnected, setIsConnected] = useState(false);
   const [connectedUsers, setConnectedUsers] = useState([]);
@@ -10,67 +11,33 @@ export const useSocket = (shapes, setShapes, history, historyIndex, canvasSize) 
   const [userDrawings, setUserDrawings] = useState({});
 
   useEffect(() => {
-    socketRef.current = io('http://localhost:3001', {
-      transports: ['websocket']
+    // Initialize the socket connection
+    socketRef.current = io(SOCKET_SERVER_URL, {
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
     });
 
     const socket = socketRef.current;
 
+    // Connection Events
     socket.on('connect', () => {
-      setIsConnected(true);
       console.log('Connected to server');
+      setIsConnected(true);
     });
 
     socket.on('disconnect', () => {
-      setIsConnected(false);
       console.log('Disconnected from server');
+      setIsConnected(false);
     });
 
-    // Receive initial whiteboard state
-    socket.on('whiteboard-state', (state) => {
-      setShapes(state.shapes);
+    socket.on('connect_error', (error) => {
+      console.error('Connection error:', error);
+      setIsConnected(false);
     });
 
-    // Handle shape updates from other users
-    socket.on('shape-update', (data) => {
-      if (data.type === 'add') {
-        setShapes(prev => [...prev, data.shape]);
-      } else if (data.type === 'update') {
-        setShapes(prev => prev.map(s => s.id === data.shape.id ? data.shape : s));
-      } else if (data.type === 'delete') {
-        setShapes(prev => prev.filter(s => s.id !== data.shapeId));
-      } else if (data.type === 'clear') {
-        setShapes([]);
-      } else if (data.type === 'replace-all') {
-        setShapes(data.shapes);
-      }
-    });
-
-    // Handle user drawing states
-    socket.on('user-drawing', (data) => {
-      setUserDrawings(prev => ({
-        ...prev,
-        [data.userId]: data.currentShape
-      }));
-    });
-
-    // Handle user cursors
-    socket.on('user-cursor', (data) => {
-      setUserCursors(prev => ({
-        ...prev,
-        [data.userId]: data.cursor
-      }));
-    });
-
-    // Handle user connections
-    socket.on('users-update', (users) => {
-      setConnectedUsers(users);
-    });
-
-    socket.on('user-joined', (user) => {
-      setConnectedUsers(prev => [...prev, user]);
-    });
-
+    // User Events
+    socket.on('users-update', (users) => setConnectedUsers(users));
+    socket.on('user-joined', (user) => setConnectedUsers(prev => [...prev, user]));
     socket.on('user-left', (userId) => {
       setConnectedUsers(prev => prev.filter(u => u.id !== userId));
       setUserCursors(prev => {
@@ -78,46 +45,61 @@ export const useSocket = (shapes, setShapes, history, historyIndex, canvasSize) 
         delete newCursors[userId];
         return newCursors;
       });
-      setUserDrawings(prev => {
-        const newDrawings = { ...prev };
-        delete newDrawings[userId];
-        return newDrawings;
-      });
     });
 
+    // Whiteboard State Events
+    socket.on('whiteboard-state', (state) => {
+      setShapes(state.shapes || []);
+      setHistory(state.history || [[]]);
+      setHistoryIndex(state.historyIndex || 0);
+    });
+
+    socket.on('shape-update', (data) => {
+      if (data.type === 'add') setShapes(prev => [...prev, data.shape]);
+      else if (data.type === 'update') setShapes(prev => prev.map(s => s.id === data.shape.id ? data.shape : s));
+      else if (data.type === 'delete') setShapes(prev => prev.filter(s => s.id !== data.shapeId));
+      else if (data.type === 'clear') setShapes([]);
+      else if (data.type === 'replace-all') setShapes(data.shapes);
+    });
+
+    // Real-time Drawing/Cursor Events
+    socket.on('user-cursor', ({ userId, cursor }) => {
+      setUserCursors(prev => ({ ...prev, [userId]: cursor }));
+    });
+
+    socket.on('user-drawing', ({ userId, ...drawingState }) => {
+      setUserDrawings(prev => ({ ...prev, [userId]: drawingState }));
+    });
+
+    // Cleanup on component unmount
     return () => {
-      socket.disconnect();
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
     };
-  }, [setShapes]);
+  }, [setShapes, setHistory, setHistoryIndex]);
 
-  const sendCursorMovement = useCallback((pos) => {
-    if (socketRef.current && isConnected) {
-      socketRef.current.emit('cursor-move', {
-        x: pos.x / canvasSize.width,
-        y: pos.y / canvasSize.height
-      });
-    }
-  }, [isConnected, canvasSize]);
+  // Functions to emit events to the server
+  const sendCursorMovement = (cursorData) => {
+    socketRef.current?.emit('cursor-move', cursorData);
+  };
 
-  const sendShapeUpdate = useCallback((type, data) => {
-    if (socketRef.current && isConnected) {
-      socketRef.current.emit('shape-update', { type, ...data });
-    }
-  }, [isConnected]);
+  const sendShapeUpdate = (type, payload) => {
+    socketRef.current?.emit('shape-update', { type, ...payload });
+  };
 
-  const sendDrawingState = useCallback((isDrawing, currentShape) => {
-    if (socketRef.current && isConnected) {
-      socketRef.current.emit('drawing-state', { isDrawing, currentShape });
-    }
-  }, [isConnected]);
+  const sendDrawingState = (drawingState) => {
+    socketRef.current?.emit('drawing-state', drawingState);
+  };
 
   return {
+    socket: socketRef.current,
     isConnected,
     connectedUsers,
     userCursors,
     userDrawings,
     sendCursorMovement,
     sendShapeUpdate,
-    sendDrawingState
+    sendDrawingState,
   };
 };
