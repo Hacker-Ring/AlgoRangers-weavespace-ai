@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { io } from 'socket.io-client';
 
-const SOCKET_SERVER_URL = "http://localhost:3010";
+const SOCKET_SERVER_URL = "https://algorangers-weavespace-ai.onrender.com";
 
 export const useSocket = (setShapes, setHistory, setHistoryIndex) => {
   const socketRef = useRef(null);
