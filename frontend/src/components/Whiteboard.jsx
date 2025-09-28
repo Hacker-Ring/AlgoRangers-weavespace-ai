@@ -6,6 +6,7 @@ import StatusBar from './StatusBar';
 import TextInput from './TextInput';
 import VoiceChat from './VoiceChat';
 import ChatPage from './ChatPage';
+import SubjectIconsPanel from './SubjectIconsPanel'; // Add this import
 import { useWhiteboardState } from '../hooks/useWhiteboardState';
 import { useSocket } from '../hooks/useSocket';
 import { useCanvasSize } from '../hooks/useCanvasSize';
@@ -21,7 +22,7 @@ const Whiteboard = () => {
     historyIndex, setHistory, setHistoryIndex, isDrawing, setIsDrawing, isTyping,
     setIsTyping, textInput, setTextInput, textPosition, setTextPosition, dragOffset,
     setDragOffset, resizeHandle, setResizeHandle, showProperties, setShowProperties,
-    undo, redo, clearCanvas, deleteSelected, saveToHistory
+    undo, redo, clearCanvas, deleteSelected, saveToHistory, addIconToCanvas
   } = useWhiteboardState();
 
   const {
@@ -30,11 +31,12 @@ const Whiteboard = () => {
     sendCursorMovement, sendShapeUpdate, sendDrawingState
   } = useSocket(setShapes, setHistory, setHistoryIndex);
 
-  // State to control the visibility of the voice chat panel
+  // State for floating panels
   const [isVoiceChatVisible, setIsVoiceChatVisible] = useState(false);
-  // State to control the visibility of the chat page
   const [isChatVisible, setIsChatVisible] = useState(false);
-  const roomId = 'main-workspace'; // Use actual workspace ID from your app's state or URL
+  const [isIconsPanelVisible, setIsIconsPanelVisible] = useState(false);
+
+  const roomId = 'main-workspace';
 
   useKeyboardShortcuts({
     undo,
@@ -47,38 +49,44 @@ const Whiteboard = () => {
 
   const updateSelectedShapeProperty = (property, value) => {
     if (!selectedShapeId) return;
-    setShapes(prev => prev.map(shape => {
-      if (shape.id === selectedShapeId) {
-        const updatedShape = { ...shape, [property]: value };
-        sendShapeUpdate('update', { shape: updatedShape });
-        return updatedShape;
-      }
-      return shape;
-    }));
+    setShapes(prev =>
+      prev.map(shape => {
+        if (shape.id === selectedShapeId) {
+          const updatedShape = { ...shape, [property]: value };
+          sendShapeUpdate('update', { shape: updatedShape });
+          return updatedShape;
+        }
+        return shape;
+      })
+    );
   };
 
   const getSelectedShape = () => shapes.find(shape => shape.id === selectedShapeId);
 
-  const handleSuggestion = (action) => {
-    // Your existing suggestion logic...
+  const handleSuggestion = action => {
     console.log('Suggestion action:', action);
   };
 
-  // If chat is visible, render the ChatPage component
+  const handleIconSelect = iconData => {
+    const newIconShape = addIconToCanvas(iconData);
+    sendShapeUpdate('add', { shape: newIconShape });
+  };
+
+  // If chat is visible, show chat page
   if (isChatVisible) {
     return (
-      // In Whiteboard.jsx, update the ChatPage component usage:
-<ChatPage
-  socket={socket}
-  roomId={roomId}
-  connectedUsers={connectedUsers}
-  onBack={() => setIsChatVisible(false)}
-/>
+      <ChatPage
+        socket={socket}
+        roomId={roomId}
+        connectedUsers={connectedUsers}
+        onBack={() => setIsChatVisible(false)}
+      />
     );
   }
 
   return (
     <div className="flex flex-col h-screen bg-gray-100" ref={containerRef}>
+      {/* Toolbar */}
       <Toolbar
         tool={tool}
         setTool={setTool}
@@ -96,41 +104,78 @@ const Whiteboard = () => {
         historyLength={history.length}
         isConnected={isConnected}
         connectedUsers={connectedUsers}
+        onToggleIconsPanel={() => setIsIconsPanelVisible(prev => !prev)}
+        isIconsPanelVisible={isIconsPanelVisible}
       />
 
-      {/* Voice Chat Toggle Button */}
-      <button
-        onClick={() => setIsVoiceChatVisible(prev => !prev)}
-        className={`absolute top-24 left-5 z-40 p-3 rounded-full shadow-md transition-all ${
-          isVoiceChatVisible 
-            ? 'bg-blue-500 text-white hover:bg-blue-600' 
-            : 'bg-white text-gray-700 hover:bg-gray-200'
-        }`}
-        title="Toggle Voice Chat"
-      >
-        <span className="text-lg" role="img" aria-label="voice chat icon">
-          {isVoiceChatVisible ? '🔊' : '🎤'}
-        </span>
-      </button>
-
-      {/* Chat Toggle Button */}
-      <button
-        onClick={() => setIsChatVisible(true)}
-        className="absolute top-40 left-5 z-40 p-3 rounded-full shadow-md bg-white text-gray-700 hover:bg-gray-200 transition-all"
-        title="Open Chat"
-      >
-        <span className="text-lg" role="img" aria-label="chat icon">
-          💬
-        </span>
-      </button>
+      {/* Subject Icons Panel */}
+      <SubjectIconsPanel
+        isVisible={isIconsPanelVisible}
+        onClose={() => setIsIconsPanelVisible(false)}
+        workspaceId={roomId}
+        onIconSelect={handleIconSelect}
+        canvasSize={canvasSize}
+      />
 
       {/* Voice Chat Component */}
-      <VoiceChat
-        socket={socket}
-        roomId={roomId}
-        isVisible={isVoiceChatVisible}
-      />
+      <VoiceChat socket={socket} roomId={roomId} isVisible={isVoiceChatVisible} />
 
+      {/* Floating Action Buttons (bottom-right) */}
+      <div className="fixed bottom-5 right-5 flex flex-col items-center space-y-4 z-40">
+        {/* Voice Chat Button */}
+        <button
+          onClick={() => setIsVoiceChatVisible(prev => !prev)}
+          className={`p-3 rounded-full shadow-md transition-all ${
+            isVoiceChatVisible
+              ? 'bg-blue-500 text-white hover:bg-blue-600'
+              : 'bg-white text-gray-700 hover:bg-gray-200'
+          }`}
+          title="Toggle Voice Chat"
+        >
+          <span className="text-lg" role="img" aria-label="voice chat icon">
+            {isVoiceChatVisible ? '🔊' : '🎤'}
+          </span>
+        </button>
+
+        {/* Chat Button */}
+        <button
+          onClick={() => setIsChatVisible(true)}
+          className="p-3 rounded-full shadow-md bg-white text-gray-700 hover:bg-gray-200 transition-all"
+          title="Open Chat"
+        >
+          <span className="text-lg" role="img" aria-label="chat icon">
+            💬
+          </span>
+        </button>
+
+        {/* Subject Icons Button */}
+        <button
+          onClick={() => setIsIconsPanelVisible(prev => !prev)}
+          className={`p-3 rounded-full shadow-md transition-all ${
+            isIconsPanelVisible
+              ? 'bg-purple-500 text-white hover:bg-purple-600'
+              : 'bg-white text-gray-700 hover:bg-gray-200'
+          }`}
+          title="Toggle Subject Icons"
+        >
+          <span className="text-lg" role="img" aria-label="icons panel">
+            🎯
+          </span>
+        </button>
+
+        {/* AI Flowchart Generator Button */}
+        <button
+          onClick={() => (window.location.href = '/whiteboard.html')}
+          className="p-3 rounded-full shadow-md bg-green-500 text-white hover:bg-green-600 transition-all"
+          title="AI Flowchart Generator"
+        >
+          <span className="text-lg" role="img" aria-label="flowchart">
+            📊
+          </span>
+        </button>
+      </div>
+
+      {/* Properties Panel */}
       <PropertiesPanel
         show={showProperties && getSelectedShape()}
         selectedShape={getSelectedShape()}
@@ -140,6 +185,7 @@ const Whiteboard = () => {
         onSuggestion={handleSuggestion}
       />
 
+      {/* Canvas */}
       <div className="flex-1 relative">
         <Canvas
           canvasSize={canvasSize}
@@ -172,6 +218,7 @@ const Whiteboard = () => {
           connectedUsers={connectedUsers}
         />
 
+        {/* Text Input Overlay */}
         <TextInput
           isVisible={isTyping}
           value={textInput}
@@ -179,7 +226,7 @@ const Whiteboard = () => {
           position={textPosition}
           color={color}
           strokeWidth={strokeWidth}
-          onComplete={(text) => {
+          onComplete={text => {
             if (text.trim()) {
               const newTextShape = {
                 id: Date.now().toString(),
@@ -205,6 +252,7 @@ const Whiteboard = () => {
         />
       </div>
 
+      {/* Status Bar */}
       <StatusBar isConnected={isConnected} connectedUsers={connectedUsers} />
     </div>
   );

@@ -54,6 +54,11 @@ export const useSocket = (setShapes, setHistory, setHistoryIndex) => {
         delete newCursors[userId];
         return newCursors;
       });
+      setUserDrawings(prev => {
+        const newDrawings = { ...prev };
+        delete newDrawings[userId];
+        return newDrawings;
+      });
     });
 
     // Whiteboard State Events
@@ -73,13 +78,28 @@ export const useSocket = (setShapes, setHistory, setHistoryIndex) => {
       else if (data.type === 'replace-all') setShapes(data.shapes);
     });
 
-    // Real-time Drawing/Cursor Events
+    // Real-time Drawing/Cursor Events - FIXED
     socket.on('user-cursor', ({ userId, cursor }) => {
-      setUserCursors(prev => ({ ...prev, [userId]: cursor }));
-    });
+  console.log('🎯 Received cursor from server:', userId, cursor);
 
-    socket.on('user-drawing', ({ userId, ...drawingState }) => {
-      setUserDrawings(prev => ({ ...prev, [userId]: drawingState }));
+  // Validate cursor data and ensure it uses relative coordinates
+  if (cursor && typeof cursor.x === 'number' && typeof cursor.y === 'number') {
+    setUserCursors(prev => ({
+      ...prev,
+      [userId]: {
+        x: Math.max(0, Math.min(1, cursor.x)), // Clamp to 0-1 range
+        y: Math.max(0, Math.min(1, cursor.y))  // Clamp to 0-1 range
+      }
+    }));
+  }
+});
+
+    socket.on('user-drawing', ({ userId, isDrawing, currentShape }) => {
+      console.log('🎨 User drawing update:', userId, isDrawing);
+      setUserDrawings(prev => ({
+        ...prev,
+        [userId]: { isDrawing, currentShape }
+      }));
     });
 
     // History Events
@@ -87,11 +107,6 @@ export const useSocket = (setShapes, setHistory, setHistoryIndex) => {
       console.log('📜 History update');
       setHistory(data.history || []);
       setHistoryIndex(data.historyIndex || 0);
-    });
-
-    // Debug: Log all incoming events
-    socket.onAny((eventName, ...args) => {
-      console.log(`📡 Incoming event: ${eventName}`, args);
     });
 
     // Cleanup on component unmount
@@ -103,10 +118,16 @@ export const useSocket = (setShapes, setHistory, setHistoryIndex) => {
     };
   }, [setShapes, setHistory, setHistoryIndex]);
 
-  // Functions to emit events to the server
+  // Functions to emit events to the server - FIXED CURSOR FORMAT
   const sendCursorMovement = (cursorData) => {
-    console.log('🖱️ Sending cursor movement:', cursorData);
-    socketRef.current?.emit('cursor-move', cursorData);
+    // Ensure cursor data has the correct format (relative coordinates 0-1)
+    const normalizedCursor = {
+      x: cursorData.x || 0,
+      y: cursorData.y || 0
+    };
+
+    console.log('🖱️ Sending cursor movement:', normalizedCursor);
+    socketRef.current?.emit('cursor-move', normalizedCursor);
   };
 
   const sendShapeUpdate = (type, payload) => {

@@ -1,4 +1,3 @@
-// src/hooks/useCanvasDrawing.js
 import { useState, useCallback } from 'react';
 import { getShapeBounds, getResizeHandle, pointToLineDistance } from '../utils/geometryUtils';
 
@@ -45,7 +44,7 @@ export const useCanvasDrawing = ({
       if (shape.type === 'text') {
         const w = shape.text.length * (shape.fontSize / 2);
         const h = shape.fontSize;
-        return px >= shape.x && px <= shape.x + w / canvasSize.width && 
+        return px >= shape.x && px <= shape.x + w / canvasSize.width &&
                py >= shape.y - h / canvasSize.height && py <= shape.y;
       } else if (shape.type === 'rectangle') {
         return px >= Math.min(shape.startX, shape.endX) && px <= Math.max(shape.startX, shape.endX) &&
@@ -56,8 +55,8 @@ export const useCanvasDrawing = ({
         return dist <= r;
       } else if (shape.type === 'line') {
         const dist = pointToLineDistance(
-          { x: px, y: py }, 
-          { x: shape.startX, y: shape.startY }, 
+          { x: px, y: py },
+          { x: shape.startX, y: shape.startY },
           { x: shape.endX, y: shape.endY }
         );
         return dist <= 0.01;
@@ -67,6 +66,10 @@ export const useCanvasDrawing = ({
           if (dist <= 0.01) return true;
         }
         return false;
+      } else if (shape.type === 'icon') {
+        // Add icon hit detection
+        return px >= shape.x && px <= shape.x + shape.width / canvasSize.width &&
+               py >= shape.y && py <= shape.y + shape.height / canvasSize.height;
       }
       return false;
     });
@@ -77,6 +80,13 @@ export const useCanvasDrawing = ({
     setStartPos(pos);
     setIsDrawing(true);
 
+    // Send cursor position immediately when starting to draw
+    const relativePos = {
+      x: pos.x / canvasSize.width,
+      y: pos.y / canvasSize.height
+    };
+    sendCursorMovement(relativePos);
+
     if (tool === 'text') {
       setTextPosition(pos);
       setIsTyping(true);
@@ -86,7 +96,7 @@ export const useCanvasDrawing = ({
 
     if (tool === 'select') {
       const selectedShape = shapes.find(shape => shape.id === selectedShapeId);
-      
+
       if (selectedShape) {
         const handle = getResizeHandle(pos, selectedShape, canvasSize);
         if (handle) {
@@ -96,7 +106,7 @@ export const useCanvasDrawing = ({
       }
 
       const clickedShape = findClickedShape(pos);
-      
+
       if (clickedShape) {
         setSelectedShapeId(clickedShape.id);
         setDragOffset({ x: pos.x, y: pos.y });
@@ -122,14 +132,18 @@ export const useCanvasDrawing = ({
   }, [
     getCanvasCoordinates, tool, shapes, selectedShapeId, canvasSize, color, strokeWidth,
     setIsDrawing, setTextPosition, setIsTyping, setTextInput, setResizeHandle,
-    setSelectedShapeId, setDragOffset, setCurrentShape, sendDrawingState, findClickedShape
+    setSelectedShapeId, setDragOffset, setCurrentShape, sendDrawingState, findClickedShape, sendCursorMovement
   ]);
 
   const draw = useCallback((e) => {
     const pos = getCanvasCoordinates(e);
-    
-    // Send cursor position
-    sendCursorMovement(pos);
+
+    // Send cursor position with relative coordinates (0-1 range)
+    const relativePos = {
+      x: pos.x / canvasSize.width,
+      y: pos.y / canvasSize.height
+    };
+    sendCursorMovement(relativePos);
 
     // Handle resize
     if (resizeHandle && selectedShapeId) {
@@ -145,7 +159,7 @@ export const useCanvasDrawing = ({
 
         if (s.type === 'rectangle' || s.type === 'line') {
           let newShape = { ...s };
-          
+
           if (resizeHandle.includes('n')) newShape.startY = (bounds.top + dy) / canvasSize.height;
           if (resizeHandle.includes('s')) newShape.endY = (bounds.bottom + dy) / canvasSize.height;
           if (resizeHandle.includes('w')) newShape.startX = (bounds.left + dx) / canvasSize.width;
@@ -172,6 +186,18 @@ export const useCanvasDrawing = ({
           };
           sendShapeUpdate('update', { shape: newShape });
           return newShape;
+        } else if (s.type === 'icon') {
+          // Handle icon resizing
+          const scaleX = Math.abs(dx) / (bounds.right - bounds.left) + 1;
+          const scaleY = Math.abs(dy) / (bounds.bottom - bounds.top) + 1;
+          const newShape = {
+            ...s,
+            width: Math.max(20, s.width * Math.max(0.5, scaleX)),
+            height: Math.max(20, s.height * Math.max(0.5, scaleY)),
+            fontSize: Math.max(12, s.fontSize * Math.max(0.5, scaleX))
+          };
+          sendShapeUpdate('update', { shape: newShape });
+          return newShape;
         }
 
         return s;
@@ -185,17 +211,23 @@ export const useCanvasDrawing = ({
         if (shape.id !== selectedShapeId) return shape;
         const dx = (pos.x - dragOffset.x) / canvasSize.width;
         const dy = (pos.y - dragOffset.y) / canvasSize.height;
-        const newShape = shape.type === 'text' 
-          ? { ...shape, x: shape.x + dx, y: shape.y + dy }
-          : {
-              ...shape,
-              startX: shape.startX + dx,
-              startY: shape.startY + dy,
-              endX: shape.endX + dx,
-              endY: shape.endY + dy,
-              points: shape.points?.map(p => ({ x: p.x + dx, y: p.y + dy }))
-            };
-        
+
+        let newShape;
+        if (shape.type === 'text') {
+          newShape = { ...shape, x: shape.x + dx, y: shape.y + dy };
+        } else if (shape.type === 'icon') {
+          newShape = { ...shape, x: shape.x + dx, y: shape.y + dy };
+        } else {
+          newShape = {
+            ...shape,
+            startX: shape.startX + dx,
+            startY: shape.startY + dy,
+            endX: shape.endX + dx,
+            endY: shape.endY + dy,
+            points: shape.points?.map(p => ({ x: p.x + dx, y: p.y + dy }))
+          };
+        }
+
         sendShapeUpdate('update', { shape: newShape });
         return newShape;
       }));
@@ -206,17 +238,17 @@ export const useCanvasDrawing = ({
     if (!isDrawing) return;
 
     if (tool === 'pencil') {
-      const updatedShape = { 
-        ...currentShape, 
+      const updatedShape = {
+        ...currentShape,
         points: [...currentShape.points, { x: pos.x / canvasSize.width, y: pos.y / canvasSize.height }]
       };
       setCurrentShape(updatedShape);
       sendDrawingState(true, updatedShape);
     } else {
-      const updatedShape = { 
-        ...currentShape, 
-        endX: pos.x / canvasSize.width, 
-        endY: pos.y / canvasSize.height 
+      const updatedShape = {
+        ...currentShape,
+        endX: pos.x / canvasSize.width,
+        endY: pos.y / canvasSize.height
       };
       setCurrentShape(updatedShape);
       sendDrawingState(true, updatedShape);
@@ -241,15 +273,15 @@ export const useCanvasDrawing = ({
 
     setIsDrawing(false);
     sendDrawingState(false, null);
-    
+
     if (currentShape) {
       const newShapes = [...shapes, currentShape];
       setShapes(newShapes);
       setCurrentShape(null);
-      
+
       sendShapeUpdate('add', { shape: currentShape });
       saveToHistory();
-      
+
       setTool('select');
       setSelectedShapeId(currentShape.id);
       setShowProperties(true);

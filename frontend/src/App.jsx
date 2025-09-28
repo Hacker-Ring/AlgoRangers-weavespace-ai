@@ -8,6 +8,7 @@ import Home from './components/Home'
 import About from './components/About'
 import Contact from './components/Contact'
 import Whiteboard from './components/Whiteboard'
+import Mermaid from "./components/Mermaid.jsx";
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -59,6 +60,7 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
+          <Route path="/mermaid" element={<Mermaid/>}/>
           <Route 
             path="/login" 
             element={

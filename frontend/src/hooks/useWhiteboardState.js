@@ -1,4 +1,3 @@
-// src/hooks/useWhiteboardState.js
 import { useState, useCallback } from 'react';
 
 export const useWhiteboardState = () => {
@@ -8,7 +7,7 @@ export const useWhiteboardState = () => {
   const [shapes, setShapes] = useState([]);
   const [currentShape, setCurrentShape] = useState(null);
   const [selectedShapeId, setSelectedShapeId] = useState(null);
-  const [selectedShape, setSelectedShape] = useState(null); // 👈 add full shape reference
+  const [selectedShape, setSelectedShape] = useState(null);
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -66,6 +65,29 @@ export const useWhiteboardState = () => {
     }
   }, [selectedShapeId, saveToHistory]);
 
+  // Add icon to canvas function - remove canvasSize dependency
+// Update the addIconToCanvas function to use proper coordinate system:
+  const addIconToCanvas = useCallback((iconData) => {
+    const newIconShape = {
+      id: `icon-${Date.now()}`,
+      type: 'icon',
+      x: iconData.x || 0.3, // Use relative coordinates (0-1 range)
+      y: iconData.y || 0.3,
+      width: iconData.width || 100,
+      height: iconData.height || 100,
+      emoji: iconData.emoji,
+      text: iconData.type === 'text' ? iconData.emoji : undefined,
+      fontSize: iconData.fontSize || 48,
+      color: color,
+      name: iconData.name,
+      category: iconData.category
+    };
+
+    setShapes(prev => [...prev, newIconShape]);
+    saveToHistory();
+    return newIconShape;
+  }, [color, saveToHistory]);
+
   return {
     tool,
     setTool,
@@ -101,6 +123,7 @@ export const useWhiteboardState = () => {
     undo,
     redo,
     clearCanvas,
-    deleteSelected
+    deleteSelected,
+    addIconToCanvas
   };
 };
