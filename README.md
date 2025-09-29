@@ -278,7 +278,7 @@ Ensure your backend `.env` file has the correct `FRONTEND_URL` and the AI model 
 
 **AI Model Connection Sequence**
 
-Make sure to copy the exact URL displayed in the terminal after running `python app.py` and update it in frontend/public/whiteboard.html.
+Make sure to copy the exact URL displayed in the terminal after running `python app.py` and update it in **frontend/public/whiteboard.html**.
 ```bash
 // IMPORTANT: Replace this with your current ngrok URL from model server
 const backendUrl = '{Paste your ngrok url}/generate';
